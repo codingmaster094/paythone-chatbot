@@ -2,7 +2,7 @@ import io
 import os
 import json
 import base64
-import urllib.request  # પાયથોનની પોતાની ઇન-બિલ્ટ લાઈબ્રેરી (ઇન્સ્ટોલ નથી કરવી પડતી)
+import urllib.request
 import streamlit as st
 
 st.set_page_config(page_title="Super AI Assistant", page_icon="🤖", layout="centered")
@@ -62,7 +62,7 @@ if user_prompt := st.chat_input("What's on your mind?"):
                     }
                 })
             
-            # urllib નો ઉપયોગ કરીને ડાયરેક્ટ ગુગલ સર્વર સાથે કનેક્શન
+            # ડાયરેક્ટ ગુગલ સર્વર સાથે સેફ કનેક્શન
             try:
                 json_payload = json.dumps({"contents": [{"parts": parts_payload}]}).encode("utf-8")
                 
@@ -76,11 +76,19 @@ if user_prompt := st.chat_input("What's on your mind?"):
                 with urllib.request.urlopen(req) as response:
                     response_data = json.loads(response.read().decode("utf-8"))
                     
-                    # રિસ્પોન્સમાંથી સાચો ટેક્સ્ટ કાઢવો
-                    ai_response = response_data['candidates'][0]['content']['parts'][0]['text']
-                    
-                    st.markdown(ai_response)
-                    st.session_state.messages.append({"role": "assistant", "content": ai_response})
+                    # સેફ રસ્તો: લિસ્ટ અને ડિક્શનરીના ઇન્ડેક્સ ઇન-લાઇન ચેક કરવા
+                    try:
+                        ai_response = response_data['candidates'][0]['content']['parts'][0]['text']
+                        st.markdown(ai_response)
+                        st.session_state.messages.append({"role": "assistant", "content": ai_response})
+                    except KeyError:
+                        st.error("Received unexpected data format from Google AI server.")
+                        st.json(response_data) # જો એરર આવે તો સાચો ડેટા સ્ક્રીન પર દેખાશે
                 
+            except urllib.error.HTTPError as http_err:
+                # જો API Key માં કોઈ લોચો હશે તો અહીં પકડાશે
+                error_msg = http_err.read().decode("utf-8")
+                st.error(f"Google API Error (HTTP {http_err.code}): Please double check your API Key inside Streamlit Secrets Settings.")
+                st.code(error_msg)
             except Exception as e:
-                st.error("Something went wrong with the API call. Please check your inputs.")
+                st.error(f"System Error: {str(e)}")
