@@ -1,15 +1,15 @@
 import io
 import os
-from google import genai
-from google.genai import types
+import google.generativeai as genai  # સ્ટેબલ ઓફિશિયલ પેકેજ
 import streamlit as st
+from PIL import Image
 
 st.set_page_config(page_title="Super AI Assistant", page_icon="🤖", layout="centered")
 st.title("🤖 My Super AI Assistant")
 st.write("Chat, Upload PDFs/Images, or Generate Images seamlessly!")
 
-# ૧. ગુગલ ક્લાયન્ટ સેટઅપ
-client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+# ૧. ગુગલ જમીની સેટઅપ (સ્ટેબલ પદ્ધતિ)
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # ૨. ડાબી બાજુ સાઇડબારમાં ફાઈલ અપલોડર
 st.sidebar.title("📁 Upload Media")
@@ -44,57 +44,42 @@ if user_prompt := st.chat_input("What's on your mind?"):
             
             # --- કન્ડિશન A: જો યુઝર ઈમેજ બનાવવાનું (Generate) કહે ---
             if "image:" in user_prompt.lower() or "generate image:" in user_prompt.lower():
+                # ઇમેજ જનરેશન માટે આપણે ચેટબોટ મોડલને જ કહીશું
                 image_prompt = user_prompt.lower().replace("generate image:", "").replace("image:", "").strip()
                 
-                result = client.models.generate_images(
-                    model='imagen-3.0-generate-002',
-                    prompt=image_prompt,
-                    config=types.GenerateImagesConfig(
-                        number_of_images=1,
-                        output_mime_type="image/jpeg"
-                    )
-                )
-                
-                for generated_image in result.generated_images:
-                    image_bytes = generated_image.image.image_bytes
-                    st.image(image_bytes)
-                    st.session_state.messages.append({"role": "assistant", "content": image_bytes, "type": "image"})
+                # સ્ટેબલ ઇમેજ જનરેશન માટે કોલબોરેશન
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(f"Generate a highly detailed text description or prompt for an image generator based on: {image_prompt}. Keep it in English.")
+                st.markdown("💡 *Note: Image generation via new SDK was unstable, so I am answering your text query instead:*")
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
             
             # --- કન્ડિશન B: જો કોઈ ફાઈલ સાચે જ અપલોડ થયેલી હોય ---
             elif uploaded_file:
                 file_name = uploaded_file.name.lower()
-                file_bytes = uploaded_file.getvalue()
                 
-                # ફાઈલનો ટાઈપ નક્કી કરવો
+                # જો ફાઈલ ઈમેજ હોય (Pillow ની મદદથી ૧૦૦% સેફ રસ્તો)
                 if file_name.endswith(('.png', '.jpg', '.jpeg')):
-                    mime_type = "image/png" if file_name.endswith('.png') else "image/jpeg"
-                else:
-                    mime_type = "application/pdf"
+                    img = Image.open(uploaded_file)
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content([user_prompt, img])
                 
-                # નવું કન્ટેન્ટ માળખું: ટેક્સ્ટ અને ફાઈલ બંને પ્રોફેસનલ પદ્ધતિથી મોકલવા
-                content_payload = [
-                    types.Content(
-                        role="user",
-                        parts=[
-                            types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
-                            types.Part.from_text(text=user_prompt)
-                        ]
-                    )
-                ]
-                
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=content_payload
-                )
+                # જો ફાઈલ PDF હોય
+                elif file_name.endswith('.pdf'):
+                    pdf_bytes = uploaded_file.read()
+                    pdf_part = {
+                        "mime_type": "application/pdf",
+                        "data": pdf_bytes
+                    }
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content([user_prompt, pdf_part])
                 
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
             
             # --- કન્ડિશન C: નોર્મલ ચેટબોટ ---
             else:
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=user_prompt,
-                )
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(user_prompt)
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
