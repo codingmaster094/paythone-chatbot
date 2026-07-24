@@ -10,9 +10,7 @@ st.set_page_config(page_title="My Chat GPT Clone", page_icon="💬", layout="cen
 st.title("💬 My Personal ChatGPT")
 
 # સાચો પાયથોન નિયમ: પહેલા લોકલ .env ચેક કરશે, જો ત્યાં ન મળે તો Streamlit Cloud ના Secrets ચેક કરશે
-api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-
-client = genai.Client(api_key=api_key)
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 # ૧. પાયથોન મેમરીમાં ચેટ હિસ્ટ્રી સાચવવા માટેનું સ્ટ્રક્ચર
 if "messages" not in st.session_state:
