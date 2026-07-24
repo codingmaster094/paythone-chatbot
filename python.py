@@ -65,26 +65,27 @@ if user_prompt := st.chat_input("What's on your mind?"):
                 file_name = uploaded_file.name.lower()
                 file_bytes = uploaded_file.getvalue()
                 
-                # ૧૦૦% સાચો રસ્તો: જો ફાઈલ ઈમેજ (JPG, PNG) હોય
+                # ફાઈલનો ટાઈપ નક્કી કરવો
                 if file_name.endswith(('.png', '.jpg', '.jpeg')):
-                    # ઈમેજનો સાચો પ્રકાર નક્કી કરવો
                     mime_type = "image/png" if file_name.endswith('.png') else "image/jpeg"
-                    
-                    # બાઇટ્સ ડેટાને ગુગલ ટાઇપ્સ પાર્ટમાં કન્વર્ટ કરવો
-                    image_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
-                    
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=[image_part, user_prompt]
-                    )
+                else:
+                    mime_type = "application/pdf"
                 
-                # જો ફાઈલ PDF હોય
-                elif file_name.endswith('.pdf'):
-                    pdf_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=[pdf_part, user_prompt]
+                # નવું કન્ટેન્ટ માળખું: ટેક્સ્ટ અને ફાઈલ બંને પ્રોફેસનલ પદ્ધતિથી મોકલવા
+                content_payload = [
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
+                            types.Part.from_text(text=user_prompt)
+                        ]
                     )
+                ]
+                
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=content_payload
+                )
                 
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
