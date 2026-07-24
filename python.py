@@ -1,94 +1,71 @@
-import io
 import os
 import json
 import base64
 import urllib.request
-import streamlit as st
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-st.set_page_config(page_title="Super AI Assistant", page_icon="🤖", layout="centered")
-st.title("🤖 My Super AI Assistant")
-st.write("Chat, Upload PDFs/Images, or Ask anything seamlessly!")
+app = FastAPI()
 
-# ૧. ગુગલ API કી મેળવવી
-API_KEY = st.secrets["GEMINI_API_KEY"]
-API_URL = f"https://googleapis.com{API_KEY}"
-
-# ૨. ડાબી બાજુ સાઇડબારમાં ફાઈલ અપલોડર
-st.sidebar.title("📁 Upload Media")
-uploaded_file = st.sidebar.file_uploader(
-    "Upload a PDF or an Image:", 
-    type=["pdf", "png", "jpg", "jpeg"]
+# HTML ફ્રન્ટએન્ડ સાથે કનેક્ટ કરવા માટે CORS સેટિંગ્સ
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# ૩. પાયથોન મેમરીમાં ચેટ હિસ્ટ્રી સાચવવી
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# ગુગલ જેમીની URL સેટઅપ
+API_KEY = os.environ.get("GEMINI_API_KEY")
+API_URL = f"https://googleapis.com{API_KEY}"
 
-# ૪. જૂની વાતચીત સ્ક્રીન પર બતાવવી
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# યુઝરના પ્રશ્નનું માળખું નક્કી કરવું
+class ChatRequest(BaseModel):
+    prompt: str
+    file_bytes: str = None  # જો યુઝર ઈમેજ કે PDF મોકલે તો (ઓપ્શનલ)
+    file_name: str = None
 
-# ૫. નવો યુઝર ઇનપુટ
-if user_prompt := st.chat_input("What's on your mind?"):
+@app.get("/")
+def read_root():
+    return {"status": "Active", "message": "Welcome to Super AI API on Vercel!"}
+
+@app.post("/api/chat")
+def chat_with_ai(req: ChatRequest):
+    if not API_KEY:
+        raise HTTPException(status_code=500, detail="API Key missing on Vercel settings.")
+        
+    parts_payload = [{"text": req.prompt}]
     
-    with st.chat_message("user"):
-        st.markdown(user_prompt)
-    st.session_state.messages.append({"role": "user", "content": user_prompt})
-
-    with st.chat_message("assistant"):
-        with st.spinner("Processing..."):
+    # જો ફ્રન્ટએન્ડમાંથી ફાઈલનો ડેટા આવે
+    if req.file_bytes and req.file_name:
+        name_lower = req.file_name.lower()
+        if name_lower.endswith(('.png', '.jpg', '.jpeg')):
+            mime_type = "image/png" if name_lower.endswith('.png') else "image/jpeg"
+        else:
+            mime_type = "application/pdf"
             
-            # ગુગલ API માટેનું પેલોડ માળખું
-            parts_payload = [{"text": user_prompt}]
+        parts_payload.insert(0, {
+            "inline_data": {
+                "mime_type": mime_type,
+                "data": req.file_bytes
+            }
+        })
+        
+    try:
+        json_payload = json.dumps({"contents": [{"parts": parts_payload}]}).encode("utf-8")
+        request_obj = urllib.request.Request(
+            API_URL, 
+            data=json_payload, 
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        
+        with urllib.request.urlopen(request_obj) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+            ai_response = response_data['candidates'][0]['content']['parts'][0]['text']
+            return {"response": ai_response}
             
-            # જો યુઝરે ફાઈલ અપલોડ કરી હોય
-            if uploaded_file:
-                file_name = uploaded_file.name.lower()
-                file_bytes = uploaded_file.getvalue()
-                
-                # બાઇટ્સ ડેટાને Base64 ટેક્સ્ટમાં બદલવો
-                base64_data = base64.b64encode(file_bytes).decode("utf-8")
-                
-                if file_name.endswith(('.png', '.jpg', '.jpeg')):
-                    mime_type = "image/png" if file_name.endswith('.png') else "image/jpeg"
-                else:
-                    mime_type = "application/pdf"
-                
-                parts_payload.insert(0, {
-                    "inline_data": {
-                        "mime_type": mime_type,
-                        "data": base64_data
-                    }
-                })
-            
-            # ડાયરેક્ટ ગુગલ સર્વર સાથે સેફ કનેક્શન
-            try:
-                json_payload = json.dumps({"contents": [{"parts": parts_payload}]}).encode("utf-8")
-                
-                req = urllib.request.Request(
-                    API_URL, 
-                    data=json_payload, 
-                    headers={"Content-Type": "application/json"},
-                    method="POST"
-                )
-                
-                with urllib.request.urlopen(req) as response:
-                    response_data = json.loads(response.read().decode("utf-8"))
-                    
-                    # સેફ રસ્તો: લિસ્ટ અને ડિક્શનરીના ઇન્ડેક્સ ઇન-લાઇન ચેક કરવા
-                    try:
-                        ai_response = response_data['candidates'][0]['content']['parts'][0]['text']
-                        st.markdown(ai_response)
-                        st.session_state.messages.append({"role": "assistant", "content": ai_response})
-                    except KeyError:
-                        st.error("Received unexpected data format from Google AI server.")
-                        st.json(response_data) # જો એરર આવે તો સાચો ડેટા સ્ક્રીન પર દેખાશે
-                
-            except urllib.error.HTTPError as http_err:
-                # જો API Key માં કોઈ લોચો હશે તો અહીં પકડાશે
-                error_msg = http_err.read().decode("utf-8")
-                st.error(f"Google API Error (HTTP {http_err.code}): Please double check your API Key inside Streamlit Secrets Settings.")
-                st.code(error_msg)
-            except Exception as e:
-                st.error(f"System Error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
