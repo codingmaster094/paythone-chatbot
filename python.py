@@ -5,14 +5,17 @@ import streamlit as st
 
 st.set_page_config(page_title="Super AI Assistant", page_icon="🤖", layout="centered")
 st.title("🤖 My Super AI Assistant")
-st.write("Now you can Chat, Upload PDFs, or Generate Images!")
+st.write("Now you can Chat, Upload PDFs/Images, or Generate Images!")
 
 # ૧. ગુગલ ક્લાયન્ટ સેટઅપ
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-# ૨. ડાબી બાજુ સાઇડબારમાં PDF અપલોડ કરવાનું બોક્સ બનાવવું
-st.sidebar.title("📁 Upload Documents")
-uploaded_file = st.sidebar.file_uploader("Upload a PDF file to analyze:", type=["pdf"])
+# ૨. ડાબી બાજુ સાઇડબારમાં PDF અને ઈમેજ (PNG/JPG) બંને અપલોડ કરવાનું બોક્સ બનાવવું
+st.sidebar.title("📁 Upload Media")
+uploaded_file = st.sidebar.file_uploader(
+    "Upload a PDF or an Image:", 
+    type=["pdf", "png", "jpg", "jpeg"]
+)
 
 # ૩. પાયથોન મેમરીમાં ચેટ હિસ્ટ્રી સાચવવી
 if "messages" not in st.session_state:
@@ -38,12 +41,10 @@ if user_prompt := st.chat_input("What's on your mind?"):
     with st.chat_message("assistant"):
         with st.spinner("Processing..."):
             
-            # --- કન્ડિશન A: જો યુઝર ઈમેજ બનાવવાનું કહે ---
+            # --- કન્ડિશન A: જો યુઝર ઈમેજ બનાવવાનું (Generate) કહે ---
             if "image:" in user_prompt.lower() or "generate image:" in user_prompt.lower():
-                # પ્રૉમ્પટમાંથી નકામા અક્ષરો કાઢી નાખવા
                 image_prompt = user_prompt.lower().replace("generate image:", "").replace("image:", "").strip()
                 
-                # Imagen 3 મોડલનો ઉપયોગ કરીને ફોટો બનાવવો
                 result = client.models.generate_images(
                     model='imagen-3.0-generate-002',
                     prompt=image_prompt,
@@ -53,23 +54,21 @@ if user_prompt := st.chat_input("What's on your mind?"):
                     )
                 )
                 
-                # ફોટો લોડ કરીને સ્ક્રીન પર બતાવવો
                 for generated_image in result.generated_images:
                     image_bytes = generated_image.image.image_bytes
                     st.image(image_bytes)
-                    # હિસ્ટ્રીમાં સેવ કરવો
                     st.session_state.messages.append({"role": "assistant", "content": image_bytes, "type": "image"})
             
-            # --- કન્ડિશન B: જો કોઈ PDF અપલોડ કરેલી હોય ---
+            # --- કન્ડિશન B: જો કોઈ ફાઈલ (PDF અથવા Image) અપલોડ કરેલી હોય ---
             elif uploaded_file is not None:
-                # PDF ને રેડ કરી ગુગલ સર્વર પર ફાઈલ ઓબ્જેક્ટ બનાવવો
-                pdf_data = uploaded_file.read()
+                file_data = uploaded_file.read()
+                file_type = uploaded_file.type  # આ ફાઈલનો પ્રકાર (MIME type) જાણશે જેમ કે image/png કે application/pdf
                 
-                # Gemini ને PDF ડેટા અને યુઝરનો પ્રશ્ન બંને સાથે મોકલવા
+                # Gemini ને ફાઈલનો ડેટા અને યુઝરનો પ્રશ્ન બંને સાથે મોકલવા
                 response = client.models.generate_content(
                     model="gemini-2.5-flash",
                     contents=[
-                        types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"),
+                        types.Part.from_bytes(data=file_data, mime_type=file_type),
                         user_prompt
                     ]
                 )
