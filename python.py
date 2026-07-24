@@ -3,7 +3,6 @@ import os
 from google import genai
 from google.genai import types
 import streamlit as st
-from PIL import Image
 
 st.set_page_config(page_title="Super AI Assistant", page_icon="🤖", layout="centered")
 st.title("🤖 My Super AI Assistant")
@@ -64,35 +63,33 @@ if user_prompt := st.chat_input("What's on your mind?"):
             # --- કન્ડિશન B: જો કોઈ ફાઈલ સાચે જ અપલોડ થયેલી હોય ---
             elif uploaded_file:
                 file_name = uploaded_file.name.lower()
+                file_bytes = uploaded_file.getvalue()
                 
-                # જો અપલોડ કરેલી ફાઈલ ઈમેજ હોય
+                # ૧૦૦% સાચો રસ્તો: જો ફાઈલ ઈમેજ (JPG, PNG) હોય
                 if file_name.endswith(('.png', '.jpg', '.jpeg')):
-                    try:
-                        # ફ્રેશ બાઇટ્સ રીડ કરીને PIL ઓબ્જેક્ટ બનાવવો
-                        img = Image.open(io.BytesIO(uploaded_file.getvalue()))
-                        response = client.models.generate_content(
-                            model="gemini-2.5-flash",
-                            contents=[img, user_prompt]
-                        )
-                        st.markdown(response.text)
-                        st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
-                    except Exception as e:
-                        st.error("Error processing image. Please try uploading again.")
-                
-                # જો અપલોડ કરેલી ફાઈલ PDF હોય
-                elif file_name.endswith('.pdf'):
-                    pdf_data = uploaded_file.getvalue()
+                    # ઈમેજનો સાચો પ્રકાર નક્કી કરવો
+                    mime_type = "image/png" if file_name.endswith('.png') else "image/jpeg"
+                    
+                    # બાઇટ્સ ડેટાને ગુગલ ટાઇપ્સ પાર્ટમાં કન્વર્ટ કરવો
+                    image_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
+                    
                     response = client.models.generate_content(
                         model="gemini-2.5-flash",
-                        contents=[
-                            types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"),
-                            user_prompt
-                        ]
+                        contents=[image_part, user_prompt]
                     )
-                    st.markdown(response.text)
-                    st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
+                
+                # જો ફાઈલ PDF હોય
+                elif file_name.endswith('.pdf'):
+                    pdf_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=[pdf_part, user_prompt]
+                    )
+                
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
             
-            # --- કન્ડિશન C: નોર્મલ ચેટબોટ (બધી ફાઈલોથી બિલકુલ મુક્ત) ---
+            # --- કન્ડિશન C: નોર્મલ ચેટબોટ ---
             else:
                 response = client.models.generate_content(
                     model="gemini-2.5-flash",
