@@ -1,15 +1,16 @@
 import io
 import os
-import google.generativeai as genai
+import base64
+import requests
 import streamlit as st
-from PIL import Image
 
 st.set_page_config(page_title="Super AI Assistant", page_icon="🤖", layout="centered")
 st.title("🤖 My Super AI Assistant")
-st.write("Chat, Upload PDFs/Images, or Generate Images seamlessly!")
+st.write("Chat, Upload PDFs/Images, or Ask anything seamlessly!")
 
-# ૧. ગુગલ જમીની સેટઅપ
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+# ૧. ગુગલ API કી મેળવવી
+API_KEY = st.secrets["GEMINI_API_KEY"]
+API_URL = f"https://googleapis.com{API_KEY}"
 
 # ૨. ડાબી બાજુ સાઇડબારમાં ફાઈલ અપલોડર
 st.sidebar.title("📁 Upload Media")
@@ -25,60 +26,55 @@ if "messages" not in st.session_state:
 # ૪. જૂની વાતચીત સ્ક્રીન પર બતાવવી
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        if message["type"] == "text":
-            st.markdown(message["content"])
-        elif message["type"] == "image":
-            st.image(message["content"])
+        st.markdown(message["content"])
 
 # ૫. નવો યુઝર ઇનપુટ
 if user_prompt := st.chat_input("What's on your mind?"):
     
-    # યુઝરનો મેસેજ બતાવો અને હિસ્ટ્રીમાં સેવ કરો
     with st.chat_message("user"):
         st.markdown(user_prompt)
-    st.session_state.messages.append({"role": "user", "content": user_prompt, "type": "text"})
+    st.session_state.messages.append({"role": "user", "content": user_prompt})
 
-    # AI નો સેક્શન ચાલુ કરવો
     with st.chat_message("assistant"):
         with st.spinner("Processing..."):
             
-            # --- કન્ડિશન A: જો યુઝર ઈમેજ બનાવવાનું (Generate) કહે ---
-            if "image:" in user_prompt.lower() or "generate image:" in user_prompt.lower():
-                image_prompt = user_prompt.lower().replace("generate image:", "").replace("image:", "").strip()
-                
-                # લેટેસ્ટ સ્ટેબલ મોડલ ૨.૫ નો ઉપયોગ
-                model = genai.GenerativeModel('gemini-2.5-flash')
-                response = model.generate_content(f"Generate a highly detailed text description or prompt for an image generator based on: {image_prompt}. Keep it in English.")
-                st.markdown("💡 *Note: Image generation via new SDK was unstable, so I am answering your text query instead:*")
-                st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
+            # ગુગલ API માટેનું ડિફોલ્ટ પેલોડ માળખું
+            parts_payload = [{"text": user_prompt}]
             
-            # --- કન્ડિશન B: જો કોઈ ફાઈલ સાચે જ અપલોડ થયેલી હોય ---
-            elif uploaded_file:
+            # જો યુઝરે ફાઈલ અપલોડ કરી હોય
+            if uploaded_file:
                 file_name = uploaded_file.name.lower()
+                file_bytes = uploaded_file.getvalue()
                 
-                # લેટેસ્ટ મોડલ ૨.૫ સાથે ઈમેજ પ્રોસેસિંગ
+                # બાઇટ્સ ડેટાને Base64 ટેક્સ્ટમાં કન્વર્ટ કરવો (સર્વર માટે સેફ રસ્તો)
+                base64_data = base64.b64encode(file_bytes).decode("utf-8")
+                
                 if file_name.endswith(('.png', '.jpg', '.jpeg')):
-                    img = Image.open(uploaded_file)
-                    model = genai.GenerativeModel('gemini-2.5-flash')
-                    response = model.generate_content([user_prompt, img])
+                    mime_type = "image/png" if file_name.endswith('.png') else "image/jpeg"
+                else:
+                    mime_type = "application/pdf"
                 
-                # લેટેસ્ટ મોડલ ૨.૫ સાથે PDF પ્રોસેસિંગ
-                elif file_name.endswith('.pdf'):
-                    pdf_bytes = uploaded_file.read()
-                    pdf_part = {
-                        "mime_type": "application/pdf",
-                        "data": pdf_bytes
+                # પેલોડમાં ઈમેજ/પીડીએફ ડેટા ઉમેરવો
+                parts_payload.insert(0, {
+                    "inline_data": {
+                        "mime_type": mime_type,
+                        "data": base64_data
                     }
-                    model = genai.GenerativeModel('gemini-2.5-flash')
-                    response = model.generate_content([user_prompt, pdf_part])
-                
-                st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
+                })
             
-            # --- કન્ડિશન C: નોર્મલ ચેટબોટ ---
-            else:
-                model = genai.GenerativeModel('gemini-2.5-flash')
-                response = model.generate_content(user_prompt)
-                st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
+            # ડાયરેક્ટ ગુગલ સર્વરને રિકવેસ્ટ મોકલવી (વગર કોઈ એક્સ્ટ્રા લાઈબ્રેરીએ)
+            try:
+                json_payload = {"contents": [{"parts": parts_payload}]}
+                headers = {"Content-Type": "application/json"}
+                
+                response = requests.post(API_URL, json=json_payload, headers=headers)
+                response_json = response.json()
+                
+                # જવાબમાંથી સાચો ટેક્સ્ટ કાઢવો
+                ai_response = response_json['candidates'][0]['content']['parts'][0]['text']
+                
+                st.markdown(ai_response)
+                st.session_state.messages.append({"role": "assistant", "content": ai_response})
+                
+            except Exception as e:
+                st.error("Something went wrong with the API call. Please check your API Key or input data.")
