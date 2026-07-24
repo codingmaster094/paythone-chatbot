@@ -1,6 +1,6 @@
 import io
 import os
-import google.generativeai as genai  # સ્ટેબલ ઓફિશિયલ પેકેજ
+import google.generativeai as genai
 import streamlit as st
 from PIL import Image
 
@@ -8,7 +8,7 @@ st.set_page_config(page_title="Super AI Assistant", page_icon="🤖", layout="ce
 st.title("🤖 My Super AI Assistant")
 st.write("Chat, Upload PDFs/Images, or Generate Images seamlessly!")
 
-# ૧. ગુગલ જમીની સેટઅપ (સ્ટેબલ પદ્ધતિ)
+# ૧. ગુગલ જમીની સેટઅપ
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # ૨. ડાબી બાજુ સાઇડબારમાં ફાઈલ અપલોડર
@@ -44,11 +44,10 @@ if user_prompt := st.chat_input("What's on your mind?"):
             
             # --- કન્ડિશન A: જો યુઝર ઈમેજ બનાવવાનું (Generate) કહે ---
             if "image:" in user_prompt.lower() or "generate image:" in user_prompt.lower():
-                # ઇમેજ જનરેશન માટે આપણે ચેટબોટ મોડલને જ કહીશું
                 image_prompt = user_prompt.lower().replace("generate image:", "").replace("image:", "").strip()
                 
-                # સ્ટેબલ ઇમેજ જનરેશન માટે કોલબોરેશન
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                # લેટેસ્ટ સ્ટેબલ મોડલ ૨.૫ નો ઉપયોગ
+                model = genai.GenerativeModel('gemini-2.5-flash')
                 response = model.generate_content(f"Generate a highly detailed text description or prompt for an image generator based on: {image_prompt}. Keep it in English.")
                 st.markdown("💡 *Note: Image generation via new SDK was unstable, so I am answering your text query instead:*")
                 st.markdown(response.text)
@@ -58,20 +57,20 @@ if user_prompt := st.chat_input("What's on your mind?"):
             elif uploaded_file:
                 file_name = uploaded_file.name.lower()
                 
-                # જો ફાઈલ ઈમેજ હોય (Pillow ની મદદથી ૧૦૦% સેફ રસ્તો)
+                # લેટેસ્ટ મોડલ ૨.૫ સાથે ઈમેજ પ્રોસેસિંગ
                 if file_name.endswith(('.png', '.jpg', '.jpeg')):
                     img = Image.open(uploaded_file)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     response = model.generate_content([user_prompt, img])
                 
-                # જો ફાઈલ PDF હોય
+                # લેટેસ્ટ મોડલ ૨.૫ સાથે PDF પ્રોસેસિંગ
                 elif file_name.endswith('.pdf'):
                     pdf_bytes = uploaded_file.read()
                     pdf_part = {
                         "mime_type": "application/pdf",
                         "data": pdf_bytes
                     }
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     response = model.generate_content([user_prompt, pdf_part])
                 
                 st.markdown(response.text)
@@ -79,7 +78,7 @@ if user_prompt := st.chat_input("What's on your mind?"):
             
             # --- કન્ડિશન C: નોર્મલ ચેટબોટ ---
             else:
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-2.5-flash')
                 response = model.generate_content(user_prompt)
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
