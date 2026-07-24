@@ -1,7 +1,9 @@
 import io
+import os
 from google import genai
 from google.genai import types
 import streamlit as st
+from PIL import Image  # ઈમેજ હેન્ડલ કરવા માટેની લાઈબ્રેરી
 
 st.set_page_config(page_title="Super AI Assistant", page_icon="🤖", layout="centered")
 st.title("🤖 My Super AI Assistant")
@@ -10,7 +12,7 @@ st.write("Now you can Chat, Upload PDFs/Images, or Generate Images!")
 # ૧. ગુગલ ક્લાયન્ટ સેટઅપ
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-# ૨. ડાબી બાજુ સાઇડબારમાં PDF અને ઈમેજ (PNG/JPG) બંને અપલોડ કરવાનું બોક્સ બનાવવું
+# ૨. ડાબી બાજુ સાઇડબારમાં ફાઈલ અપલોડ કરવાનું બોક્સ
 st.sidebar.title("📁 Upload Media")
 uploaded_file = st.sidebar.file_uploader(
     "Upload a PDF or an Image:", 
@@ -59,19 +61,31 @@ if user_prompt := st.chat_input("What's on your mind?"):
                     st.image(image_bytes)
                     st.session_state.messages.append({"role": "assistant", "content": image_bytes, "type": "image"})
             
-            # --- કન્ડિશન B: જો કોઈ ફાઈલ (PDF અથવા Image) અપલોડ કરેલી હોય ---
+            # --- કન્ડિશન B: જો કોઈ ફાઈલ અપલોડ કરેલી હોય ---
             elif uploaded_file is not None:
-                file_data = uploaded_file.read()
-                file_type = uploaded_file.type  # આ ફાઈલનો પ્રકાર (MIME type) જાણશે જેમ કે image/png કે application/pdf
+                file_name = uploaded_file.name.lower()
                 
-                # Gemini ને ફાઈલનો ડેટા અને યુઝરનો પ્રશ્ન બંને સાથે મોકલવા
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=[
-                        types.Part.from_bytes(data=file_data, mime_type=file_type),
-                        user_prompt
-                    ]
-                )
+                # જો અપલોડ કરેલી ફાઈલ ઈમેજ (ફોટો) હોય
+                if file_name.endswith(('.png', '.jpg', '.jpeg')):
+                    # ઈમેજને PIL ઓબ્જેક્ટમાં બદલો
+                    img = Image.open(uploaded_file)
+                    
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=[img, user_prompt]
+                    )
+                
+                # જો અપલોડ કરેલી ફાઈલ PDF હોય
+                else:
+                    pdf_data = uploaded_file.read()
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=[
+                            types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"),
+                            user_prompt
+                        ]
+                    )
+                
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text, "type": "text"})
             
