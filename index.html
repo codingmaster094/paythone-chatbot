@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Super AI Assistant</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .chat-container { width: 450px; height: 600px; background-color: #1e1e1e; border-radius: 10px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .chat-header { background-color: #2d2d2d; padding: 15px; text-align: center; font-size: 1.2rem; font-weight: bold; border-top-left-radius: 10px; border-top-right-radius: 10px; border-bottom: 1px solid #333; }
+        .chat-messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .message { padding: 10px 15px; border-radius: 15px; max-width: 75%; font-size: 0.95rem; line-height: 1.4; }
+        .user-msg { background-color: #007acc; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .ai-msg { background-color: #333; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .chat-input-area { padding: 15px; display: flex; gap: 10px; border-top: 1px solid #333; background-color: #1e1e1e; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
+        input[type="text"] { flex: 1; padding: 12px; border-radius: 25px; border: 1px solid #444; background-color: #252525; color: white; outline: none; }
+        button { background-color: #007acc; color: white; border: none; padding: 10px 20px; border-radius: 25px; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #005999; }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div class="chat-header">🤖 My Super AI Assistant</div>
+    <div class="chat-messages" id="chatBox">
+        <div class="message ai-msg">Hello! How can I help you today?</div>
+    </div>
+    <div class="chat-input-area">
+        <input type="text" id="userInput" placeholder="Type your message here...">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+<script>
+    // ⚠️ આ લાઇન ખાસ બદલવી: અહીં તમારી Vercel માંથી મળેલી સાચી લિંક પેસ્ટ કરો
+    const VERCEL_URL = "https:paythone-chatbot-izpw.vercel.app";
+
+    async function sendMessage() {
+        const inputField = document.getElementById("userInput");
+        const chatBox = document.getElementById("chatBox");
+        const promptText = inputField.value.trim();
+        
+        if (!promptText) return;
+
+        // ૧. યુઝરનો મેસેજ સ્ક્રીન પર બતાવો
+        chatBox.innerHTML += `<div class="message user-msg">${promptText}</div>`;
+        inputField.value = "";
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // ૨. લોડિંગ મેસેજ બતાવો
+        const loadingId = "loading-" + Date.now();
+        chatBox.innerHTML += `<div class="message ai-msg" id="${loadingId}">Thinking...</div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // ૩. Vercel પર બનેલી પાયથોન API ને કૉલ કરવો
+        try {
+            const response = await fetch(VERCEL_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: promptText })
+            });
+            
+            const data = await response.json();
+            document.getElementById(loadingId).innerText = data.response || "No response received";
+        } catch (error) {
+            document.getElementById(loadingId).innerText = "Error connecting to backend API.";
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
+
+</body>
+</html>
