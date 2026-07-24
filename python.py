@@ -1,7 +1,8 @@
 import io
 import os
+import json
 import base64
-import requests
+import urllib.request  # પાયથોનની પોતાની ઇન-બિલ્ટ લાઈબ્રેરી (ઇન્સ્ટોલ નથી કરવી પડતી)
 import streamlit as st
 
 st.set_page_config(page_title="Super AI Assistant", page_icon="🤖", layout="centered")
@@ -38,7 +39,7 @@ if user_prompt := st.chat_input("What's on your mind?"):
     with st.chat_message("assistant"):
         with st.spinner("Processing..."):
             
-            # ગુગલ API માટેનું ડિફોલ્ટ પેલોડ માળખું
+            # ગુગલ API માટેનું પેલોડ માળખું
             parts_payload = [{"text": user_prompt}]
             
             # જો યુઝરે ફાઈલ અપલોડ કરી હોય
@@ -46,7 +47,7 @@ if user_prompt := st.chat_input("What's on your mind?"):
                 file_name = uploaded_file.name.lower()
                 file_bytes = uploaded_file.getvalue()
                 
-                # બાઇટ્સ ડેટાને Base64 ટેક્સ્ટમાં કન્વર્ટ કરવો (સર્વર માટે સેફ રસ્તો)
+                # બાઇટ્સ ડેટાને Base64 ટેક્સ્ટમાં બદલવો
                 base64_data = base64.b64encode(file_bytes).decode("utf-8")
                 
                 if file_name.endswith(('.png', '.jpg', '.jpeg')):
@@ -54,7 +55,6 @@ if user_prompt := st.chat_input("What's on your mind?"):
                 else:
                     mime_type = "application/pdf"
                 
-                # પેલોડમાં ઈમેજ/પીડીએફ ડેટા ઉમેરવો
                 parts_payload.insert(0, {
                     "inline_data": {
                         "mime_type": mime_type,
@@ -62,19 +62,25 @@ if user_prompt := st.chat_input("What's on your mind?"):
                     }
                 })
             
-            # ડાયરેક્ટ ગુગલ સર્વરને રિકવેસ્ટ મોકલવી (વગર કોઈ એક્સ્ટ્રા લાઈબ્રેરીએ)
+            # urllib નો ઉપયોગ કરીને ડાયરેક્ટ ગુગલ સર્વર સાથે કનેક્શન
             try:
-                json_payload = {"contents": [{"parts": parts_payload}]}
-                headers = {"Content-Type": "application/json"}
+                json_payload = json.dumps({"contents": [{"parts": parts_payload}]}).encode("utf-8")
                 
-                response = requests.post(API_URL, json=json_payload, headers=headers)
-                response_json = response.json()
+                req = urllib.request.Request(
+                    API_URL, 
+                    data=json_payload, 
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
                 
-                # જવાબમાંથી સાચો ટેક્સ્ટ કાઢવો
-                ai_response = response_json['candidates'][0]['content']['parts'][0]['text']
-                
-                st.markdown(ai_response)
-                st.session_state.messages.append({"role": "assistant", "content": ai_response})
+                with urllib.request.urlopen(req) as response:
+                    response_data = json.loads(response.read().decode("utf-8"))
+                    
+                    # રિસ્પોન્સમાંથી સાચો ટેક્સ્ટ કાઢવો
+                    ai_response = response_data['candidates'][0]['content']['parts'][0]['text']
+                    
+                    st.markdown(ai_response)
+                    st.session_state.messages.append({"role": "assistant", "content": ai_response})
                 
             except Exception as e:
-                st.error("Something went wrong with the API call. Please check your API Key or input data.")
+                st.error("Something went wrong with the API call. Please check your inputs.")

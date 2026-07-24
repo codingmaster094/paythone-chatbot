@@ -1,3 +1,0 @@
-treamlit
-python-dotenv
-requests
